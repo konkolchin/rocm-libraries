@@ -28,7 +28,9 @@
 #include "driver.hpp"
 #include "fusionHost.hpp"
 #include "random.hpp"
+#include <cstdlib>
 #include <miopen/stringutils.hpp>
+#include <sstream>
 
 using ptr_FusionPlanDesc = MIOPEN_MANAGE_PTR(miopenFusionPlanDescriptor_t, miopenDestroyFusionPlan);
 using ptr_FusionPlanArgs = MIOPEN_MANAGE_PTR(miopenOperatorArgs_t, miopenDestroyOperatorArgs);
@@ -53,6 +55,25 @@ ptr_ActivationDesc GetManagedActivDesc()
     miopenActivationDescriptor_t activdesc;
     miopenCreateActivationDescriptor(&activdesc);
     return ptr_ActivationDesc{activdesc};
+}
+
+bool DumpConfigsEnabled()
+{
+    const char* dump = std::getenv("MIOPEN_DUMP_CONFIGS");
+    return dump != nullptr && std::string(dump) == "1";
+}
+
+template <class T>
+std::string JoinVector(const std::vector<T>& values)
+{
+    std::ostringstream os;
+    for(std::size_t i = 0; i < values.size(); ++i)
+    {
+        if(i != 0)
+            os << ",";
+        os << values[i];
+    }
+    return os.str();
 }
 
 template <class T>
@@ -426,6 +447,16 @@ struct cba_fusion_driver : test_driver
                                                  ptr_fusionplan.get(),
                                                  &workspace_size,
                                                  miopenConvolutionFwdAlgoImplicitGEMM);
+            }
+
+            if(DumpConfigsEnabled())
+            {
+                std::cout << "CTEST_CFG|"
+                          << "in=" << JoinVector(input.desc.GetLengths())
+                          << "|w=" << JoinVector(weights.desc.GetLengths())
+                          << "|psd=" << JoinVector(pads_strides_dilations)
+                          << "|bmode=" << (bias_mode ? 1 : 0) << "|pmode=" << pad_mode
+                          << "|activ=" << (tactiv ? 1 : 0) << "|amode=" << amode << std::endl;
             }
 
             if(miopenError != miopenStatusSuccess)

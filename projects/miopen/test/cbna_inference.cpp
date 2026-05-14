@@ -27,7 +27,9 @@
 #include "driver.hpp"
 #include "fusionHost.hpp"
 #include "workspace.hpp"
+#include <cstdlib>
 #include <miopen/stringutils.hpp>
+#include <sstream>
 
 using ptr_FusionPlanDesc = MIOPEN_MANAGE_PTR(miopenFusionPlanDescriptor_t, miopenDestroyFusionPlan);
 using ptr_FusionPlanArgs = MIOPEN_MANAGE_PTR(miopenOperatorArgs_t, miopenDestroyOperatorArgs);
@@ -52,6 +54,31 @@ ptr_ActivationDesc GetManagedActivDesc()
     miopenActivationDescriptor_t activdesc;
     miopenCreateActivationDescriptor(&activdesc);
     return ptr_ActivationDesc{activdesc};
+}
+
+bool DumpConfigsEnabled()
+{
+    const char* dump = std::getenv("MIOPEN_DUMP_CONFIGS");
+    return dump != nullptr && std::string(dump) == "1";
+}
+
+bool DisableHipRanonceEarlyExit()
+{
+    const char* disable = std::getenv("MIOPEN_DUMP_DISABLE_RANONCE");
+    return disable != nullptr && std::string(disable) == "1";
+}
+
+template <class T>
+std::string JoinVector(const std::vector<T>& values)
+{
+    std::ostringstream os;
+    for(std::size_t i = 0; i < values.size(); ++i)
+    {
+        if(i != 0)
+            os << ",";
+        os << values[i];
+    }
+    return os.str();
 }
 
 template <class T>
@@ -461,6 +488,16 @@ struct cbna_fusion_driver : test_driver
         // Compile
         ++total_cnt;
         miopenStatus_t miopenError = miopenCompileFusionPlan(&handle, ptr_fusionplan.get());
+        if(DumpConfigsEnabled())
+        {
+            std::cout << "CTEST_CFG|"
+                      << "in=" << JoinVector(input.desc.GetLengths())
+                      << "|w=" << JoinVector(weights.desc.GetLengths())
+                      << "|psd=" << JoinVector(pads_strides_dilations)
+                      << "|bmode=" << (bias_mode ? 1 : 0) << "|pmode=" << pad_mode
+                      << "|activ=" << (tactiv ? 1 : 0) << "|amode=" << amode
+                      << "|bnmode=" << batchnormMode << std::endl;
+        }
         if(miopenError != miopenStatusSuccess)
         {
             if(bias_mode)
@@ -494,13 +531,16 @@ struct cbna_fusion_driver : test_driver
         {
             (void)ranonce;
 #if(MIOPEN_BACKEND_HIP == 1)
-            if(!ranonce)
-            { // Compiled and ready to run, but once!
-                ranonce = true;
-            }
-            else
+            if(!DisableHipRanonceEarlyExit())
             {
-                exit(EXIT_SUCCESS); // NOLINT (concurrency-mt-unsafe)
+                if(!ranonce)
+                { // Compiled and ready to run, but once!
+                    ranonce = true;
+                }
+                else
+                {
+                    exit(EXIT_SUCCESS); // NOLINT (concurrency-mt-unsafe)
+                }
             }
 #endif
             output = get_output_tensor(filter, input, weights);
