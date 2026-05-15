@@ -3,6 +3,8 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
+#include <iostream>
 #include <string>
 
 #include <gtest/gtest.h>
@@ -20,6 +22,12 @@
 namespace {
 
 using float16 = half_float::half;
+
+bool DumpConfigsEnabled()
+{
+    const char* dump = std::getenv("MIOPEN_DUMP_CONFIGS");
+    return dump != nullptr && std::string(dump) == "1";
+}
 
 struct CbaParamNameGenerator
 {
@@ -41,6 +49,11 @@ struct CBAInferBase : ConvBiasActivInferTest<T, TestCaseType>
 {
     void RunSolver(const miopen::solver::fusion::FusionSolverBase& solv)
     {
+        if(DumpConfigsEnabled())
+        {
+            std::cout << "GTEST_CFG|param=" << testing::PrintToString(this->GetParam())
+                      << std::endl;
+        }
         auto& handle              = get_handle();
         const auto fusion_problem = miopen::FusionDescription{&this->fusePlanDesc};
         auto fusion_ctx           = miopen::FusionContext{handle};
@@ -102,6 +115,11 @@ struct CBAInferBase : ConvBiasActivInferTest<T, TestCaseType>
     template <typename Solver>
     void RunTunableSolver()
     {
+        if(DumpConfigsEnabled())
+        {
+            std::cout << "GTEST_CFG|param=" << testing::PrintToString(this->GetParam())
+                      << std::endl;
+        }
         auto& handle = get_handle();
         Solver solv{};
         const auto fusion_problem = miopen::FusionDescription{&this->fusePlanDesc};

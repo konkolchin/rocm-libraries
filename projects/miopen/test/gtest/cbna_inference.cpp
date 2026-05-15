@@ -3,7 +3,9 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
 #include <limits>
+#include <sstream>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -22,6 +24,25 @@
 namespace {
 
 using float16 = half_float::half;
+
+bool DumpConfigsEnabled()
+{
+    const char* dump = std::getenv("MIOPEN_DUMP_CONFIGS");
+    return dump != nullptr && std::string(dump) == "1";
+}
+
+template <class T>
+std::string JoinVector(const std::vector<T>& values)
+{
+    std::ostringstream os;
+    for(std::size_t i = 0; i < values.size(); ++i)
+    {
+        if(i != 0)
+            os << ",";
+        os << values[i];
+    }
+    return os.str();
+}
 
 struct CbnaParamNameGenerator
 {
@@ -247,6 +268,18 @@ std::vector<CbnaTestCase> GetCbnaTestCases()
                                   true,
                                   3,
                                   1});
+                if(DumpConfigsEnabled())
+                {
+                    const auto& tc = result.back();
+                    std::cout << "GTEST_CFG|"
+                              << "in=" << JoinVector(tc.input_dims)
+                              << "|w=" << JoinVector(tc.weights_dims)
+                              << "|psd=" << JoinVector(tc.pads_strides_dilations)
+                              << "|bmode=" << (tc.bias_mode ? 1 : 0)
+                              << "|pmode=" << tc.pad_mode << "|activ=" << (tc.test_activ ? 1 : 0)
+                              << "|amode=" << tc.activ_mode << "|bnmode=" << tc.batchnorm_mode
+                              << std::endl;
+                }
             }
         }
     }
